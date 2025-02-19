@@ -1,12 +1,22 @@
 import subprocess
 import random
+import torch
+from transformers import BlipProcessor, BlipForConditionalGeneration
+from PIL import Image
+import os
+import whisper
+import pyaudio
 
-
-# modify the path according to you ollama settings
 OLLAMA_PATH = "C:\\Users\\Anvita\\AppData\\Local\\Programs\\Ollama\\ollama.exe"
-MODEL = "mistral" 
+MODEL = "mistral"
 
 PLANET_TYPES = ["Jungle", "Desert", "Frozen", "Toxic", "Volcanic", "Oceanic"]
+PLANET_IMAGES_PATH = "images/"
+
+processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+
+whisper_model = whisper.load_model("base")
 
 def generate_planet():
     """Generates a short, concise planet description with strategic hints."""
@@ -27,13 +37,15 @@ def generate_planet():
             if line:
                 description += line + " "
 
+        error_output = ""
         for line in process.stderr:
-            pass
+            error_output += line.strip() + "\n"
 
         process.wait()
 
         if process.returncode != 0:
             description = f"A mysterious {planet_type.lower()} planet (AI error)."
+            print(f"Error occurred during AI generation: {error_output}")
 
         description = description.strip()
 
@@ -42,6 +54,7 @@ def generate_planet():
 
     except Exception as e:
         description = f"A mysterious {planet_type.lower()} planet (AI call failed)."
+        print(f"Exception while generating planet description: {e}")
 
     hint = ""
     impact = ""
@@ -74,13 +87,62 @@ def generate_planet():
         "hazard": random.choice(["Low Oxygen", "Extreme Radiation", "Unstable Terrain", "None"])
     }
 
+def generate_image_caption(image_path):
+    try:
+        image = Image.open(image_path)
 
-import random
+        inputs = processor(images=image, return_tensors="pt")
+        out = model.generate(**inputs)
+        caption = processor.decode(out[0], skip_special_tokens=True)
+
+        return caption
+    except Exception as e:
+        print(f"Error generating caption: {e}")
+        return "No caption available."
+
+def record_voice_input():
+    """Records voice input from the microphone and returns the transcribed text."""
+    print("🎤 Listening for your voice input...")
+    p = pyaudio.PyAudio()
+
+    stream = p.open(format=pyaudio.paInt16,
+                    channels=1,
+                    rate=16000,
+                    input=True,
+                    frames_per_buffer=1024)
+
+    print("🎤 Speak now...")
+    frames = []
+    for _ in range(0, int(16000 / 1024 * 5)):
+        data = stream.read(1024)
+        frames.append(data)
+
+    print("🎤 Stop speaking.")
+    stream.stop_stream()
+    stream.close()
+    p.terminate()
+
+    audio_file = "temp.wav"
+    with open(audio_file, "wb") as f:
+        f.write(b''.join(frames))
+
+    result = whisper_model.transcribe(audio_file)
+    return result['text']
 
 def explore_planet(planet, player):
-    """Handles the logic when the player lands on a planet."""
     print(f"\n🛬 Landing on {planet['name']}...")
     print(f"🌍 Planet Type: {planet['type']} - {planet['desc']}")
+
+    image_filename = f"{planet['type'].lower()}.jpg"
+    image_path = os.path.join(PLANET_IMAGES_PATH, image_filename)
+
+    if os.path.exists(image_path):
+        caption = generate_image_caption(image_path)
+        print(f"🖼️ Planet Image Caption: {caption}")
+        image = Image.open(image_path)
+        image.show()
+    else:
+        print("⚠️ No image found for this planet type.")
 
     if planet["hazard"] != "None":
         print(f"⚠️ HAZARD: {planet['hazard']} - You lose health!")
@@ -107,43 +169,46 @@ def explore_planet(planet, player):
             player.barter_for_food(food)
 
     elif planet["type"] == "Jungle":
-        print("🌳 The jungle is teeming with life, both dangerous and useful.")
-        creature_encounter = random.random()
+        print("🌿 The jungle is dense and dangerous. Watch your step!")
+        jungle_hazard = random.choice(["Venomous creature", "Poisonous plant", "Quick sand", "None"])
+        if jungle_hazard != "None":
+            print(f"⚠️ A {jungle_hazard} attacks you! You lose health.")
+            player.update_health(random.randint(10, 20))
 
-        if creature_encounter < 0.3:
-            print("🐍 You are attacked by wildlife! Your health is damaged.")
-            player.update_health(-random.randint(5, 15))
-
-        if creature_encounter < 0.5:
-            print("🗺️ You discover ancient ruins! A clue leads you closer to Haven-1.")
-            player.add_clue("A clue to Haven-1 discovered in the jungle ruins!")
+        if random.random() < 0.3:
+            print("🗺️ You find an ancient ruin with clues that could help you.")
+            player.update_health(random.randint(5, 15))
 
     elif planet["type"] == "Toxic":
-        print("☠️ The air is toxic. You feel the strain on your health.")
-        toxic_damage = random.randint(10, 20)
-        player.update_health(-toxic_damage)
-
-        if random.random() < 0.3:
-            print("⚙️ You find rare materials that can help upgrade your ship.")
-            player.upgrade_ship(random.randint(1, 3))
-
-    elif planet["type"] == "Volcanic":
-        print("🌋 The volcanic environment is dangerous, but energy-rich.")
-        lava_damage = random.randint(10, 15)
-        player.update_health(-lava_damage)
+        print("☣️ The air is filled with toxins! Your health is slowly draining.")
+        toxicity_loss = random.randint(5, 10)
+        player.update_health(-toxicity_loss)
 
         if random.random() < 0.4:
-            print("⚡ You discover a geothermal vent! Your ship’s energy reserves improve.")
-            player.upgrade_ship(2)
+            print("💎 You find rare metals to improve your ship!")
+            player.update_ship_build(random.randint(10, 20))
 
-    elif planet["type"] == "Oceanic":
-        print("🌊 The oceans are vast and perilous, with hidden dangers.")
-        water_damage = random.randint(5, 10)
-        player.update_health(-water_damage)
+    elif planet["type"] == "Volcanic":
+        print("🌋 The volcanic activity is intense! Be careful.")
+        volcanic_risk = random.choice(["Lava flow", "Erupting geyser", "None"])
+        if volcanic_risk != "None":
+            print(f"⚠️ A {volcanic_risk} damages your health!")
+            player.update_health(random.randint(10, 25))
 
         if random.random() < 0.3:
-            print("🛠️ You salvage useful tech from the ocean floor, improving your ship.")
-            player.upgrade_ship(random.randint(1, 2))
+            print("⚡ You find geothermal energy sources that could power your ship.")
+            player.update_ship_energy(random.randint(10, 20))
+
+    elif planet["type"] == "Oceanic":
+        print("🌊 The oceans are vast, but dangerous currents lurk.")
+        ocean_risk = random.choice(["Shark attack", "Tidal wave", "None"])
+        if ocean_risk != "None":
+            print(f"⚠️ A {ocean_risk} harms your health.")
+            player.update_health(random.randint(10, 20))
+
+        if random.random() < 0.5:
+            print("🛠️ You salvage old tech from the ocean floor to improve your ship!")
+            player.update_ship_build(random.randint(10, 25))
 
     if player.health <= 0:
         print("\n💀 You have succumbed to the dangers of the planet. GAME OVER.")
@@ -151,5 +216,12 @@ def explore_planet(planet, player):
 
     if player.ship_integrity <= 0:
         print("\n🚨 Your ship is beyond repair. GAME OVER.")
-        return False 
+        return False
+
     return True
+
+
+response = input("Would you like to play with Audio? Enter (Y/N): ")
+if response.upper() == "Y":
+    voice_input = record_voice_input()
+    print(f"🎤 Voice Input: {voice_input}")
