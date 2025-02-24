@@ -73,7 +73,3 @@ _Trade resources with alien merchants to improve your survival chances._
 - Expanded AI interactions with a conversational assistant.
 - More diverse alien encounters and bartering mechanics.
 - Additional gameplay events and strategic elements.
-
----
-
-**Prepare your ship, Captain. The void awaits.**
