@@ -1,0 +1,10 @@
+torch
+transformers
+pillow
+whisper
+pyaudio
+langchain-community
+langchain-ollama
+blip-image-captioning
+ollama
+subprocess

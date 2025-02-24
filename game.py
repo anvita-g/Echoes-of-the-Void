@@ -11,7 +11,7 @@ def main():
     while True:
         player.check_status()
 
-        print("\nNOVA: 'Captain, we have 3 possible destinations. Choose wisely!'")
+        print("\nNOVA: 'Captain, we have 3 possible destinations. Choose wisely!' (Loading: may take up to 2 minutes)")
 
         planets = [generate_planet() for _ in range(3)]
 
