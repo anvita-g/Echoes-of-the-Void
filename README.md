@@ -44,7 +44,8 @@ Echoes of the Void is a command-line survival game where players navigate a myst
 
 1. Install and run **Ollama**.
 2. Download and configure the **Mistral** and **Whisper** models.
-3. Run `python game.py` to start playing.
+3. Edit **Ollama** path in Planets.py to your path.
+4. Run `python game.py` to start playing.
 
 ## Game
 
